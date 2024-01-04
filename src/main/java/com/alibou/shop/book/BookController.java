@@ -1,4 +1,4 @@
-package com.alibou.security.book;
+package com.alibou.shop.book;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

@@ -1,4 +1,4 @@
-package com.alibou.security.book;
+package com.alibou.shop.book;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
