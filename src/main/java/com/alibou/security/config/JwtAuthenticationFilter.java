@@ -6,12 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import java.beans.Transient;
 import java.io.IOException;
-import java.security.Security;
-
-import jakarta.transaction.TransactionScoped;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,36 +31,61 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       @NonNull HttpServletResponse response,
       @NonNull FilterChain filterChain
   ) throws ServletException, IOException {
+
     if (request.getServletPath().contains("/api/v1/auth")) {
       filterChain.doFilter(request, response);
       return;
     }
     final String authHeader = request.getHeader("Authorization");
-    final String jwt;
-    final String userEmail;
+
     if (authHeader == null ||!authHeader.startsWith("Bearer ")) {
       filterChain.doFilter(request, response);
       return;
     }
-    jwt = authHeader.substring(7);
-    userEmail = jwtService.extractUsername(jwt);
-    if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-      UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-      var isTokenValid = tokenRepository.findByToken(jwt)
-          .map(t -> !t.isExpired() && !t.isRevoked())
-          .orElse(false);
-      if (jwtService.isTokenValid(jwt, userDetails) && isTokenValid) {
-        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+    setAuthentication(authHeader, request);
+    filterChain.doFilter(request, response);
+  }
+
+  public void setAuthentication(String authHeader, HttpServletRequest request) {
+
+    final String jwt = authHeader.substring(7);
+    final String userEmail = jwtService.extractUsername(jwt);
+
+    if (isAuthenticated(userEmail)) {
+      UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
+
+      if (isValidToken(jwt, userDetails)) {
+        SecurityContextHolder.getContext()
+                .setAuthentication(buildAuthToken(userDetails, request));
+      }
+    }
+  }
+
+  public boolean isAuthenticated(String userEmail) {
+    return userEmail != null
+            && SecurityContextHolder.getContext().getAuthentication() == null;
+  }
+
+  public UsernamePasswordAuthenticationToken buildAuthToken(UserDetails userDetails,
+                                                            HttpServletRequest request) {
+
+    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
             userDetails,
             null,
             userDetails.getAuthorities()
-        );
-        authToken.setDetails(
+    );
+    authToken.setDetails(
             new WebAuthenticationDetailsSource().buildDetails(request)
-        );
-        SecurityContextHolder.getContext().setAuthentication(authToken);
-      }
-    }
-    filterChain.doFilter(request, response);
+    );
+    return authToken;
   }
+
+  public boolean isValidToken(String jwt, UserDetails userDetails){
+
+    return jwtService.isTokenValid(jwt, userDetails)
+            && tokenRepository.findByToken(jwt)
+            .map(t -> !t.isExpired() && !t.isRevoked())
+            .orElse(false);
+  }
+
 }
